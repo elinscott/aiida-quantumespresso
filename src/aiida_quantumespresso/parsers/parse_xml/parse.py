@@ -1,5 +1,6 @@
 import collections
 import contextlib
+import warnings
 from pathlib import Path
 from xml.etree import ElementTree
 from xml.dom.minidom import Element
@@ -120,6 +121,19 @@ def get_schema_filepath(xml):
     schema_filepath = dir_path_schemas / schema_filename
 
     if not schema_filepath.exists():
+        # Newer (e.g. development) QE versions reference schema files that are not
+        # published or bundled yet. Since ``parse_xml_post_6_2`` runs
+        # ``xsd.to_dict(..., validation='lax')`` anyway, fall back to the most
+        # recent bundled schema instead of refusing outright — unknown new
+        # elements surface as lax-validation warnings rather than a hard failure.
+        available = sorted(dir_path_schemas.glob('qes_*.xsd'))
+        if available:
+            fallback = available[-1]
+            warnings.warn(
+                f'XML schema {schema_filename} is not bundled with aiida-quantumespresso '
+                f'(development QE version?); falling back to {fallback.name} with lax validation.'
+            )
+            return fallback
         raise XMLUnsupportedFormatError(
             f'Cannot find schema {schema_filepath.name} in {dir_path_schemas}.\n'
             'Make sure you are running a supported Quantum ESPRESSO version.'
